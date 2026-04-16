@@ -1,0 +1,261 @@
+/* ═══════════════════════════════════════════════════════
+   Toolbar — radiology workstation aesthetic
+   Dense, dark, monospaced group headers, cyan accent.
+   ═══════════════════════════════════════════════════════ */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 52px;
+  padding: 0 12px;
+  background: var(--bg-panel, #101014);
+  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+  flex-shrink: 0;
+  user-select: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.toolbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── Brand ──────────────────────────────────────────── */
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+
+.brandPulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent, #06d6a0);
+  box-shadow: 0 0 10px var(--accent, #06d6a0), 0 0 3px var(--accent, #06d6a0);
+  animation: pulse 3s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 10px var(--accent, #06d6a0); }
+  50% { opacity: 0.5; box-shadow: 0 0 4px var(--accent, #06d6a0); }
+}
+
+.brandText {
+  font-family: "JetBrains Mono", "Fira Code", "SF Mono", monospace;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--text-primary, #e8e6e3);
+}
+
+.brandAccent {
+  color: var(--accent, #06d6a0);
+  font-weight: 400;
+}
+
+/* ── Separator ──────────────────────────────────────── */
+
+.sep {
+  width: 1px;
+  height: 28px;
+  background: var(--border, rgba(255, 255, 255, 0.06));
+  margin: 0 6px;
+  flex-shrink: 0;
+}
+
+/* ── Tool groups ────────────────────────────────────── */
+
+.group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.groupLabel {
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 8.5px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-tertiary, rgba(255, 255, 255, 0.55));
+  padding-left: 4px;
+  line-height: 1;
+}
+
+.groupBtns {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* ── Tool buttons ───────────────────────────────────── */
+
+.btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  min-width: 40px;
+  padding: 2px 8px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.72));
+  cursor: pointer;
+  transition: all 0.12s ease;
+  position: relative;
+}
+
+.btn:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.04));
+  color: var(--text-primary, #e8e6e3);
+}
+
+.btn:active {
+  transform: scale(0.95);
+}
+
+.btn.active {
+  background: var(--accent-dim, rgba(6, 214, 160, 0.1));
+  border-color: var(--accent, #06d6a0);
+  color: var(--accent, #06d6a0);
+}
+
+.btn.active::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 25%;
+  width: 50%;
+  height: 1.5px;
+  background: var(--accent, #06d6a0);
+  border-radius: 1px;
+}
+
+.btnIcon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.btnLabel {
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 8.5px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  opacity: 0.85;
+}
+
+/* ── Action buttons (undo, clear, reset) ────────────── */
+
+.actionBtn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  min-width: 40px;
+  padding: 2px 8px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.72));
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.actionBtn:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.04));
+  color: var(--text-primary, #e8e6e3);
+}
+
+.actionBtn:active {
+  transform: scale(0.95);
+}
+
+.actionBtn .btnIcon {
+  font-size: 14px;
+}
+
+.actionBtn .btnLabel {
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 8.5px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  opacity: 0.85;
+}
+
+.actionBtn.danger:hover {
+  background: rgba(226, 75, 74, 0.08);
+  border-color: rgba(226, 75, 74, 0.3);
+  color: #e24b4a;
+}
+
+/* ── Spacer ─────────────────────────────────────────── */
+
+.spacer {
+  flex: 1;
+  min-width: 8px;
+}
+
+/* ── Sync button ────────────────────────────────────── */
+
+.syncBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 5px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  background: transparent;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.72));
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.syncBtn:hover:not(:disabled) {
+  border-color: var(--accent, #06d6a0);
+  color: var(--accent, #06d6a0);
+  background: var(--accent-dim, rgba(6, 214, 160, 0.06));
+}
+
+.syncBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.syncBtn.syncing {
+  border-color: var(--accent, #06d6a0);
+  color: var(--accent, #06d6a0);
+}
+
+.syncIcon {
+  font-size: 15px;
+  display: inline-block;
+}
+
+.spinning {
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

@@ -1,0 +1,98 @@
+.mprGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 2px;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  padding: 2px;
+  position: relative;
+}
+
+/* Axial takes top-left, Sagittal top-right, Coronal bottom-left */
+.mprCell {
+  position: relative;
+  overflow: hidden;
+  background: #0a0a0e;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.mprCell:first-child {
+  border-color: var(--accent, #06d6a0);
+  box-shadow: inset 0 0 0 1px var(--accent, #06d6a0);
+}
+
+.mprLabel {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  z-index: 10;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent, #06d6a0);
+  background: rgba(0, 0, 0, 0.6);
+  padding: 2px 7px;
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+.mprViewport {
+  width: 100%;
+  height: 100%;
+}
+
+.mprOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(0, 0, 0, 0.7);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  z-index: 20;
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-top-color: var(--accent, #06d6a0);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.mprError {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  background: rgba(226, 75, 74, 0.12);
+  border: 1px solid rgba(226, 75, 74, 0.3);
+  border-radius: 6px;
+  padding: 10px 16px;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 11px;
+  color: #e24b4a;
+  z-index: 30;
+}
+
+.mprErrorHint {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.35);
+}

@@ -1,0 +1,130 @@
+/* ═══════════════════════════════════════════════════════
+   ViewerLayout — viewport grid
+   Each cell shows its assigned series name and a
+   loading indicator. Active viewport gets accent border.
+   ═══════════════════════════════════════════════════════ */
+
+.grid {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  gap: 2px;
+  background: #000;
+  padding: 2px;
+}
+
+/* ── Viewport cell ──────────────────────────────────── */
+
+.cell {
+  position: relative;
+  overflow: hidden;
+  background: #0a0a0e;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  transition: border-color 0.15s ease;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+}
+
+.cell:hover:not(.cellActive) {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.cellActive {
+  border-color: var(--accent, #06d6a0);
+  box-shadow: inset 0 0 0 1px var(--accent, #06d6a0);
+}
+
+/* ── Viewport header (badge + series name) ──────────── */
+
+.vpHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.6) 0%, transparent 100%);
+}
+
+.vpBadge {
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.35);
+  background: rgba(0, 0, 0, 0.5);
+  padding: 2px 5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.cellActive .vpBadge {
+  color: var(--accent, #06d6a0);
+  background: rgba(6, 214, 160, 0.12);
+}
+
+.vpSeries {
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cellActive .vpSeries {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.vpLoading {
+  font-size: 7px;
+  color: var(--accent, #06d6a0);
+  animation: blink 1s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
+
+/* ── Empty viewport placeholder ─────────────────────── */
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+  flex: 1;
+}
+
+.emptyIcon {
+  font-size: 32px;
+  color: rgba(255, 255, 255, 0.06);
+}
+
+.emptyText {
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.2);
+  letter-spacing: 0.03em;
+  text-align: center;
+  max-width: 200px;
+  line-height: 1.5;
+}
+
+.cellActive .emptyText {
+  color: rgba(255, 255, 255, 0.3);
+}

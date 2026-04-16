@@ -1,0 +1,40 @@
+{
+  "Name": "OHIFOrthanc",
+  "StorageDirectory": "/var/lib/orthanc/db",
+  "IndexDirectory": "/var/lib/orthanc/db",
+  "HttpPort": 8042,
+  "DicomPort": 4242,
+
+  "AuthenticationEnabled": true,
+  "RegisteredUsers": {
+    "admin": "orthanc"
+  },
+
+  "RemoteAccessAllowed": true,
+  "HttpCompressionEnabled": true,
+
+  "Plugins": [
+    "/usr/share/orthanc/plugins"
+  ],
+
+  "DicomWeb": {
+    "Enable": true,
+    "Root": "/dicom-web/",
+    "EnableWado": true,
+    "WadoRoot": "/wado",
+    "Ssl": false,
+    "QidoCaseSensitive": false,
+    "StudiesMetadata": "Full",
+    "SeriesMetadata": "Full"
+  },
+
+  "MaximumStorageSize": 0,
+  "MaximumPatientCount": 0,
+
+  "HttpsCACertificates": "",
+  "SslEnabled": false,
+
+  "KeepAlive": true,
+  "TcpNoDelay": true,
+  "HttpThreadsCount": 50
+}
