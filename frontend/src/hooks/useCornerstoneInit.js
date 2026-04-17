@@ -257,8 +257,9 @@ async function initCornerstone() {
         RectangleROITool,
         ArrowAnnotateTool,        // ← confirmed in v4 docs
 
-        // MPR crosshairs
-        CrosshairsTool,           // ← confirmed in v4 docs
+        // MPR crosshairs — registered globally but NOT added
+        // to DEFAULT_TOOL_GROUP (see note in Step 6)
+        CrosshairsTool,
 
         // Tool group management
         ToolGroupManager,
@@ -266,17 +267,47 @@ async function initCornerstone() {
       } = cornerstoneTools;
 
       // ─────────────────────────────────────────────────────────
-      //  STEP 5b: Build the tool list with defensive filtering
+      //  STEP 5b: Verify StackScrollTool exists
       //
-      //  If a future version renames or removes a tool, we skip
-      //  it gracefully instead of crashing the entire init chain.
+      //  This is the #1 cause of "scroll not working" — if the
+      //  import resolved to undefined, everything downstream
+      //  silently skips it and scroll never works.
+      // ─────────────────────────────────────────────────────────
+      if (!StackScrollTool) {
+        console.error(
+          "[init] StackScrollTool is UNDEFINED. Mousewheel scroll will NOT work.",
+          "Available tool exports:",
+          Object.keys(cornerstoneTools).filter((k) => k.includes("Scroll"))
+        );
+      } else {
+        console.log(
+          "[init] StackScrollTool found:",
+          StackScrollTool.toolName
+        );
+      }
+
+      // ─────────────────────────────────────────────────────────
+      //  STEP 5c: Build the tool list with defensive filtering
       //
-      //  Every tool class has a static `.toolName` property
-      //  (e.g. LengthTool.toolName === "Length"). We verify
-      //  both the class and the property exist.
+      //  Two separate lists:
+      //    • allToolsToRegister — registered globally via addTool()
+      //      so ANY tool group can use them later
+      //    • defaultGroupTools — added to DEFAULT_TOOL_GROUP
+      //      (excludes CrosshairsTool which crashes in stack viewports)
+      //
+      //  CrosshairsTool is designed ONLY for Volume viewports in
+      //  MPR mode (it needs 3 linked orthogonal viewports). When
+      //  added to a tool group that contains stack viewports, its
+      //  mouseMoveCallback crashes with:
+      //    "Cannot read properties of undefined (reading 'length')"
+      //  because it tries to access viewport references that don't
+      //  exist in stack mode.
+      //
+      //  The MPRViewer component should create its own tool group
+      //  and add CrosshairsTool there.
       // ─────────────────────────────────────────────────────────
 
-      const allTools = [
+      const allToolsToRegister = [
         WindowLevelTool,
         PanTool,
         ZoomTool,
@@ -286,7 +317,7 @@ async function initCornerstone() {
         EllipticalROITool,
         RectangleROITool,
         ArrowAnnotateTool,
-        CrosshairsTool,
+        CrosshairsTool,       // registered globally so MPR can use it
       ].filter((Tool) => {
         if (!Tool) {
           console.warn("[init] A tool import resolved to undefined — skipping");
@@ -299,13 +330,23 @@ async function initCornerstone() {
         return true;
       });
 
+      // Tools that go into DEFAULT_TOOL_GROUP — everything
+      // EXCEPT CrosshairsTool (which belongs in MPR group only)
+      const defaultGroupTools = allToolsToRegister.filter(
+        (Tool) => !CrosshairsTool || Tool.toolName !== CrosshairsTool.toolName
+      );
+
       console.log(
-        "[init] Tools to register:",
-        allTools.map((T) => T.toolName).join(", ")
+        "[init] Tools to register globally:",
+        allToolsToRegister.map((T) => T.toolName).join(", ")
+      );
+      console.log(
+        "[init] Tools for DEFAULT_TOOL_GROUP:",
+        defaultGroupTools.map((T) => T.toolName).join(", ")
       );
 
       // ─────────────────────────────────────────────────────────
-      //  STEP 5c: Register all tools globally
+      //  STEP 5d: Register all tools globally
       //
       //  addTool() makes a tool class available to ALL tool groups.
       //  It's a global registration — you only do it once.
@@ -314,7 +355,7 @@ async function initCornerstone() {
       //  addTool throws — we catch and ignore that.
       // ─────────────────────────────────────────────────────────
 
-      allTools.forEach((Tool) => {
+      allToolsToRegister.forEach((Tool) => {
         try {
           cornerstoneTools.addTool(Tool);
         } catch (e) {
@@ -333,7 +374,13 @@ async function initCornerstone() {
       //      ones on click), Enabled (visible only), or Disabled
       //
       //  We create one shared group "DEFAULT_TOOL_GROUP" used by
-      //  all viewport components (Stack, MPR, Fusion).
+      //  stack viewport components.
+      //
+      //  IMPORTANT: CrosshairsTool is NOT added to this group.
+      //  It crashes when used in stack viewports because it
+      //  expects linked volume viewports (MPR). The MPRViewer
+      //  component should create its own tool group and add
+      //  CrosshairsTool there.
       //
       //  ┌─────────────────────────────────────────────────────┐
       //  │  TOOL MODES — critical for annotation persistence:  │
@@ -358,8 +405,8 @@ async function initCornerstone() {
       if (!toolGroup) {
         toolGroup = ToolGroupManager.createToolGroup("DEFAULT_TOOL_GROUP");
 
-        // Add every registered tool to this group
-        allTools.forEach((Tool) => {
+        // Add only default-group tools (NOT CrosshairsTool)
+        defaultGroupTools.forEach((Tool) => {
           try {
             toolGroup.addTool(Tool.toolName);
           } catch (e) {
@@ -372,30 +419,60 @@ async function initCornerstone() {
         // Primary (left click)   → Window/Level
         // Auxiliary (middle click)→ Pan
         // Secondary (right click) → Zoom
-        // Mousewheel              → Stack Scroll (no binding needed)
+        // Mousewheel              → Stack Scroll
 
         if (WindowLevelTool) {
           toolGroup.setToolActive(WindowLevelTool.toolName, {
             bindings: [{ mouseButton: ToolEnums.MouseBindings.Primary }],
           });
+          console.log("[init] WindowLevelTool activated on Primary (left click)");
         }
 
         if (PanTool) {
           toolGroup.setToolActive(PanTool.toolName, {
             bindings: [{ mouseButton: ToolEnums.MouseBindings.Auxiliary }],
           });
+          console.log("[init] PanTool activated on Auxiliary (middle click)");
         }
 
         if (ZoomTool) {
           toolGroup.setToolActive(ZoomTool.toolName, {
             bindings: [{ mouseButton: ToolEnums.MouseBindings.Secondary }],
           });
+          console.log("[init] ZoomTool activated on Secondary (right click)");
         }
 
-        // StackScrollTool listens on the mousewheel by default —
-        // no explicit mouse button binding needed, just activate it.
+        // ── StackScrollTool: mousewheel ──────────────────────────
+        //
+        // In this Cornerstone v4 build, StackScrollTool does NOT
+        // auto-bind to the wheel event. It requires an explicit
+        // MouseBindings.Wheel binding (value 524288). Without this,
+        // the tool sits in Active mode listening to nothing and
+        // scrolling never works.
+        //
+        // If this tool is undefined or fails to activate, scrolling
+        // through slices will not work at all.
         if (StackScrollTool) {
-          toolGroup.setToolActive(StackScrollTool.toolName);
+          try {
+            toolGroup.setToolActive(StackScrollTool.toolName, {
+              bindings: [{ mouseButton: ToolEnums.MouseBindings.Wheel }],
+            });
+            console.log(
+              "[init] StackScrollTool activated on mousewheel. " +
+              "Tool name:", StackScrollTool.toolName,
+              "| hasTool:", toolGroup.hasTool(StackScrollTool.toolName)
+            );
+          } catch (err) {
+            console.error(
+              "[init] FAILED to activate StackScrollTool:", err,
+              "— Mousewheel scroll will NOT work."
+            );
+          }
+        } else {
+          console.error(
+            "[init] StackScrollTool is undefined — cannot activate. " +
+            "Mousewheel scroll will NOT work."
+          );
         }
 
         // ── Annotation tools: Passive by default ──────────────────
@@ -411,6 +488,9 @@ async function initCornerstone() {
         // NEVER set these to Disabled — that hides all annotations
         // drawn with that tool, which is the "annotations disappear
         // when I switch tools" bug.
+        //
+        // NOTE: CrosshairsTool is NOT included here. It is only
+        // meant for MPR mode and crashes in stack viewports.
 
         const annotationTools = [
           LengthTool,
@@ -418,7 +498,6 @@ async function initCornerstone() {
           EllipticalROITool,
           RectangleROITool,
           ArrowAnnotateTool,
-          CrosshairsTool,
         ];
 
         annotationTools.forEach((Tool) => {
@@ -431,6 +510,19 @@ async function initCornerstone() {
         });
 
         console.log("[init] Default tool group created with bindings");
+
+        // ── Final verification: confirm StackScrollTool state ─────
+        if (StackScrollTool) {
+          try {
+            const toolState = toolGroup.getToolOptions(StackScrollTool.toolName);
+            console.log(
+              "[init] StackScrollTool final state in DEFAULT_TOOL_GROUP:",
+              JSON.stringify(toolState)
+            );
+          } catch {
+            // getToolOptions may not exist in all builds
+          }
+        }
       }
 
       // ─────────────────────────────────────────────────────────

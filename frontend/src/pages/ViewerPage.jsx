@@ -188,9 +188,12 @@ const ALL_SWITCHABLE_TOOLS = [
  * @param {string} newToolName  — the tool to make Active
  *
  * This iterates every registered ToolGroup and:
- *   • Moves the previously-active primary tool to Passive
- *     (annotations stay visible, handles still draggable)
- *   • Sets `newToolName` as Active with left-click binding
+ *   1. Moves the previously-active primary tool to Passive
+ *      (annotations stay visible, handles still draggable)
+ *   2. Sets `newToolName` as Active with left-click binding
+ *   3. Re-activates background tools (StackScroll on wheel,
+ *      Pan on middle-click, Zoom on right-click) that were
+ *      swept to Passive in step 1.
  *
  * Because we set unused tools to **Passive** (not Disabled),
  * all previously drawn annotations remain on screen and
@@ -199,7 +202,8 @@ const ALL_SWITCHABLE_TOOLS = [
  */
 async function switchActiveTool(newToolName) {
   const csTools = await import("@cornerstonejs/tools");
-  const { ToolGroupManager, Enums } = csTools;
+  const { ToolGroupManager, Enums, StackScrollTool, PanTool, ZoomTool } =
+    csTools;
 
   // Iterate every tool group (stack viewers, MPR, fusion
   // may each have their own group)
@@ -232,18 +236,25 @@ async function switchActiveTool(newToolName) {
       }
     });
 
+    // Also set StackScrollTool to Passive first so we can
+    // cleanly re-activate it below (it's not in
+    // ALL_SWITCHABLE_TOOLS because it uses mousewheel, not
+    // a primary mouse button — but the Passive sweep above
+    // doesn't touch it, so we handle it explicitly).
+    if (StackScrollTool && toolGroup.hasTool(StackScrollTool.toolName)) {
+      try {
+        toolGroup.setToolPassive(StackScrollTool.toolName);
+      } catch {}
+    }
+
     /* ── Step 2: Activate the selected tool ───────────────
      *
      * We bind it to the primary (left) mouse button.
-     * Middle-button Pan and right-button Zoom are set up
-     * once during initialisation and are left untouched here.
      * ─────────────────────────────────────────────────── */
     try {
       if (toolGroup.hasTool(newToolName)) {
         toolGroup.setToolActive(newToolName, {
-          bindings: [
-            { mouseButton: Enums.MouseBindings.Primary },
-          ],
+          bindings: [{ mouseButton: Enums.MouseBindings.Primary }],
         });
       }
     } catch (err) {
@@ -251,6 +262,58 @@ async function switchActiveTool(newToolName) {
         `[ViewerPage] Could not activate ${newToolName} in group ${groupId}:`,
         err
       );
+    }
+
+    /* ── Step 3: Re-activate background tools ─────────────
+     *
+     * These tools use different input channels (mousewheel,
+     * middle-click, right-click) so they don't conflict with
+     * whichever tool is on left-click. They must ALWAYS be
+     * active so the user can scroll/pan/zoom regardless of
+     * which annotation tool is selected.
+     *
+     * The Passive sweep in Step 1 killed Pan and Zoom.
+     * StackScrollTool was explicitly set Passive above.
+     * We bring them all back here.
+     * ─────────────────────────────────────────────────── */
+
+    // StackScrollTool: mousewheel
+    // Requires explicit Wheel binding (MouseBindings.Wheel = 524288).
+    if (StackScrollTool && toolGroup.hasTool(StackScrollTool.toolName)) {
+      try {
+        toolGroup.setToolActive(StackScrollTool.toolName, {
+          bindings: [{ mouseButton: Enums.MouseBindings.Wheel }],
+        });
+      } catch {}
+    }
+
+    // PanTool: middle-click (Auxiliary)
+    // Only bind to middle-click when Pan is NOT the primary tool
+    // to avoid duplicate bindings.
+    if (
+      PanTool &&
+      newToolName !== "Pan" &&
+      toolGroup.hasTool(PanTool.toolName)
+    ) {
+      try {
+        toolGroup.setToolActive(PanTool.toolName, {
+          bindings: [{ mouseButton: Enums.MouseBindings.Auxiliary }],
+        });
+      } catch {}
+    }
+
+    // ZoomTool: right-click (Secondary)
+    // Only bind to right-click when Zoom is NOT the primary tool.
+    if (
+      ZoomTool &&
+      newToolName !== "Zoom" &&
+      toolGroup.hasTool(ZoomTool.toolName)
+    ) {
+      try {
+        toolGroup.setToolActive(ZoomTool.toolName, {
+          bindings: [{ mouseButton: Enums.MouseBindings.Secondary }],
+        });
+      } catch {}
     }
   }
 }
@@ -341,7 +404,8 @@ export default function ViewerPage() {
    *       via our switchActiveTool() helper — which
    *       correctly preserves all existing annotations
    *       by setting old tools to Passive instead of
-   *       Disabled.
+   *       Disabled, AND re-activates background tools
+   *       (StackScroll, Pan, Zoom) so they keep working.
    * ═══════════════════════════════════════════════════════ */
   const handleToolChange = useCallback(
     (toolName) => {

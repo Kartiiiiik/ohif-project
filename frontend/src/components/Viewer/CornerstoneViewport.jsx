@@ -13,21 +13,24 @@
 // │    6. Cleans up the engine on unmount                          │
 // └─────────────────────────────────────────────────────────────────┘
 //
-// IMPORTANT DESIGN DECISIONS:
+// DESIGN DECISIONS:
 //
-//   • The RenderingEngine is created ONCE per mount and reused.
-//     Recreating it on every imageIds change would destroy the
-//     tool group association, lose annotations, and cause the
-//     "Tool X not added to toolGroup" warnings.
+//   • RenderingEngine created ONCE per mount and reused. Recreating
+//     it on every imageIds change destroys tool group associations,
+//     loses annotations, and causes "Tool X not added" warnings.
 //
 //   • When imageIds change, we only call viewport.setStack() on
 //     the existing viewport — no engine teardown needed.
 //
-//   • Tool switching sets the old tool to PASSIVE (not Disabled)
-//     so that annotations drawn with previous tools remain visible.
+//   • Tool switching sets old tool to PASSIVE (not Disabled) so
+//     annotations drawn with previous tools remain visible.
 //
-//   • A ResizeObserver watches the container element so the canvas
-//     stays correctly sized when the window or layout changes.
+//   • StackScrollTool, PanTool (middle-click), and ZoomTool
+//     (right-click) are ALWAYS re-activated after every tool switch
+//     because the Passive sweep would otherwise kill them.
+//
+//   • A ResizeObserver watches the container so the canvas stays
+//     correctly sized on window resize, layout change, etc.
 
 import { useEffect, useRef } from "react";
 import * as cornerstone from "@cornerstonejs/core";
@@ -37,10 +40,6 @@ import styles from "./CornerstoneViewport.module.css";
 
 // ═══════════════════════════════════════════════════════════════════
 //  STABLE ENGINE ID GENERATOR
-//
-//  Module-level counter ensures each CornerstoneViewport instance
-//  gets a unique engine ID. The ID is captured in a ref on first
-//  render so it stays stable across re-renders.
 // ═══════════════════════════════════════════════════════════════════
 let engineCounter = 0;
 function generateEngineId() {
@@ -48,28 +47,30 @@ function generateEngineId() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  TOOL NAME MAP
+//  PRIMARY TOOL NAME MAP
 //
 //  Maps toolbar IDs → Cornerstone v4 tool names.
-//  Built from actual tool classes so it's always in sync.
-//
-//  CRITICAL v4 CHANGE:
-//    v3: StackScrollMouseWheelTool → v4: StackScrollTool
+//  Only includes tools that compete for the PRIMARY (left-click)
+//  mouse binding. Pan/Zoom/StackScroll are "background" tools
+//  that use middle-click, right-click, and mousewheel respectively
+//  — they're handled separately so they don't get swept to Passive.
 // ═══════════════════════════════════════════════════════════════════
-function buildToolNameMap() {
+function buildPrimaryToolMap() {
   const {
     WindowLevelTool,
-    PanTool,
-    ZoomTool,
     LengthTool,
     AngleTool,
     EllipticalROITool,
     RectangleROITool,
     ArrowAnnotateTool,
+    PanTool,
+    ZoomTool,
   } = cornerstoneTools;
 
   const map = {};
 
+  // These tools compete for the left-click binding.
+  // When one is activated, all others go to Passive.
   const entries = [
     ["WindowLevel", WindowLevelTool],
     ["Pan", PanTool],
@@ -110,6 +111,9 @@ export default function CornerstoneViewport({
   const observerRef = useRef(null);
 
   // ── Cornerstone init state ───────────────────────────────────────
+  // useCornerstoneInit returns { ready, error } — destructure both.
+  // The old code used the object itself as a boolean, which was
+  // always truthy and broke the !ready guards.
   const { ready, error } = useCornerstoneInit();
 
   // Generate a stable engine ID on first render only
@@ -119,6 +123,9 @@ export default function CornerstoneViewport({
 
   // ═══════════════════════════════════════════════════════════════════
   //  EFFECT 1: Create the RenderingEngine and viewport ONCE
+  //
+  //  Runs when Cornerstone becomes ready or component mounts.
+  //  Does NOT re-run on imageIds change — that's Effect 2.
   // ═══════════════════════════════════════════════════════════════════
   useEffect(() => {
     if (!ready || !containerRef.current) return;
@@ -130,7 +137,7 @@ export default function CornerstoneViewport({
       try {
         const engineId = engineIdRef.current;
 
-        // Clean up any stale engine
+        // Clean up any stale engine with this ID
         const existing = cornerstone.getRenderingEngine(engineId);
         if (existing) existing.destroy();
 
@@ -138,7 +145,7 @@ export default function CornerstoneViewport({
         const engine = new cornerstone.RenderingEngine(engineId);
         engineRef.current = engine;
 
-        // Define and create the viewport
+        // Define and create the stack viewport
         const viewportInput = {
           viewportId,
           type: cornerstone.Enums.ViewportType.STACK,
@@ -150,32 +157,41 @@ export default function CornerstoneViewport({
 
         engine.setViewports([viewportInput]);
 
-        // Add viewport to the default tool group — CRITICAL
+        // ── Add viewport to the default tool group ──────────
+        // Without this, NO tools work on this viewport.
         const toolGroup = cornerstoneTools.ToolGroupManager.getToolGroup(
           "DEFAULT_TOOL_GROUP"
         );
         if (toolGroup) {
           toolGroup.addViewport(viewportId, engineId);
+          console.log(
+            `[CornerstoneViewport] Added ${viewportId} to DEFAULT_TOOL_GROUP`
+          );
+
+          // Verify StackScrollTool is in this group
+          const { StackScrollTool } = cornerstoneTools;
+          if (StackScrollTool) {
+            const hasTool = toolGroup.hasTool(StackScrollTool.toolName);
+            console.log(
+              `[CornerstoneViewport] StackScrollTool in group: ${hasTool}`
+            );
+          }
         } else {
           console.warn("[CornerstoneViewport] DEFAULT_TOOL_GROUP not found");
         }
 
         initializedRef.current = true;
 
-        // ── Force resize after layout settles ─────────────────
+        // ── Force resize after CSS layout settles ─────────────
         //
         // When setViewports() runs, the container may not have
-        // its final CSS dimensions yet (flex/grid hasn't finished
-        // calculating). Cornerstone reads clientWidth/clientHeight
-        // at that moment and creates the canvas at whatever size
-        // it finds — often 0×0 or very small.
+        // its final dimensions yet. Cornerstone reads clientWidth
+        // / clientHeight at that moment and creates the canvas at
+        // whatever size it finds — often 0×0 or very small.
         //
         // requestAnimationFrame waits for the browser to finish
-        // layout. Then engine.resize() re-reads the (now correct)
-        // container dimensions and resizes the WebGL canvas.
-        //
-        // resetCamera() re-fits the image to the new canvas size
-        // so it displays at the correct scale, not tiny.
+        // layout, then engine.resize() re-reads the correct
+        // dimensions and resizes the WebGL canvas to match.
         requestAnimationFrame(() => {
           if (engineRef.current) {
             engineRef.current.resize();
@@ -190,10 +206,7 @@ export default function CornerstoneViewport({
         // ── ResizeObserver — keep canvas in sync ──────────────
         //
         // Handles: window resize, sidebar toggle, layout switch
-        // (1×1 → 2×2), DevTools panel open/close, etc.
-        //
-        // Without this, the canvas stays at whatever size it was
-        // when first created, even if the container grows/shrinks.
+        // (1×1 → 2×2), DevTools panel, etc.
         resizeObserver = new ResizeObserver(() => {
           if (engineRef.current) {
             engineRef.current.resize();
@@ -217,14 +230,12 @@ export default function CornerstoneViewport({
     // ── Cleanup on unmount ────────────────────────────────
     return () => {
       try {
-        // Disconnect resize observer
         if (resizeObserver) resizeObserver.disconnect();
         if (observerRef.current) {
           observerRef.current.disconnect();
           observerRef.current = null;
         }
 
-        // Remove viewport from tool group
         const toolGroup = cornerstoneTools.ToolGroupManager.getToolGroup(
           "DEFAULT_TOOL_GROUP"
         );
@@ -232,7 +243,6 @@ export default function CornerstoneViewport({
           try { toolGroup.removeViewports(engineIdRef.current); } catch {}
         }
 
-        // Destroy the rendering engine
         const engine = cornerstone.getRenderingEngine(engineIdRef.current);
         if (engine) engine.destroy();
 
@@ -265,8 +275,7 @@ export default function CornerstoneViewport({
         // Load the new image stack, starting at index 0
         await viewport.setStack(imageIds, 0);
 
-        // After loading, resize and reset camera so the image
-        // fills the viewport correctly at the right scale.
+        // Resize and reset camera so the image fills the viewport
         requestAnimationFrame(() => {
           if (engineRef.current) {
             engineRef.current.resize();
@@ -291,8 +300,25 @@ export default function CornerstoneViewport({
   // ═══════════════════════════════════════════════════════════════════
   //  EFFECT 3: Switch the active tool
   //
-  //  Sets all tools to Passive (annotations stay visible),
-  //  then activates the selected tool with left-click binding.
+  //  This is the most critical effect for correct tool behaviour.
+  //
+  //  When the user clicks a tool in the toolbar:
+  //
+  //    1. ALL primary tools go to Passive (annotations stay visible)
+  //    2. The selected tool becomes Active on left-click
+  //    3. "Background" tools are ALWAYS re-activated:
+  //       • StackScrollTool → mousewheel (scroll through slices)
+  //       • PanTool         → middle-click (unless Pan is primary)
+  //       • ZoomTool        → right-click (unless Zoom is primary)
+  //
+  //  Step 3 is the key fix. The Passive sweep in Step 1 kills ALL
+  //  tools including Pan/Zoom/StackScroll. Without re-activating
+  //  them, scrolling/panning/zooming would break after the first
+  //  tool switch — which is exactly what was happening.
+  //
+  //  NEVER set tools to Disabled — that hides their annotations.
+  //  Always use Passive (visible + handles draggable, but no new
+  //  annotations on click).
   // ═══════════════════════════════════════════════════════════════════
   useEffect(() => {
     if (!ready) return;
@@ -302,39 +328,131 @@ export default function CornerstoneViewport({
     );
     if (!toolGroup) return;
 
-    // Build (or reuse) the tool name map
+    // Build (or reuse) the primary tool name map
     if (!toolMapRef.current) {
-      toolMapRef.current = buildToolNameMap();
+      toolMapRef.current = buildPrimaryToolMap();
     }
     const toolMap = toolMapRef.current;
 
+    // Look up the Cornerstone tool name for the toolbar ID
     const newToolName = toolMap[activeTool];
     if (!newToolName) {
       console.warn(`[CornerstoneViewport] Unknown tool: "${activeTool}"`);
       return;
     }
 
-    // Step 1: Set all switchable tools to Passive
+    // Destructure the tools and enums we need
+    const {
+      StackScrollTool,
+      PanTool,
+      ZoomTool,
+      Enums,
+    } = cornerstoneTools;
+
+    // ── Step 1: Set ALL primary tools to Passive ──────────────
+    //
+    // This clears the left-click binding from whatever tool was
+    // previously active, while keeping its annotations visible.
     Object.values(toolMap).forEach((csToolName) => {
-      try { toolGroup.setToolPassive(csToolName); } catch {}
+      try {
+        toolGroup.setToolPassive(csToolName);
+      } catch {
+        // Tool might not be in this group — safe to skip
+      }
     });
 
-    // Step 2: Activate the selected tool
+    // ── Step 2: Activate the selected tool on left-click ──────
     try {
       toolGroup.setToolActive(newToolName, {
         bindings: [
-          { mouseButton: cornerstoneTools.Enums.MouseBindings.Primary },
+          { mouseButton: Enums.MouseBindings.Primary },
         ],
       });
     } catch (err) {
-      console.warn(`[CornerstoneViewport] Could not activate ${newToolName}:`, err);
+      console.warn(
+        `[CornerstoneViewport] Could not activate ${newToolName}:`,
+        err
+      );
     }
 
-    // Ensure StackScrollTool stays active for mousewheel
+    // ── Step 3: Re-activate background tools ──────────────────
+    //
+    // These tools use different input channels (mousewheel,
+    // middle-click, right-click) so they don't conflict with
+    // whichever tool is on left-click. They must ALWAYS be
+    // active so the user can scroll/pan/zoom regardless of
+    // which annotation tool is selected.
+    //
+    // The Passive sweep in Step 1 killed them — we bring them
+    // back here.
+
+    // ── StackScrollTool: mousewheel ──────────────────────────
+    //
+    // This build requires an explicit Wheel binding (524288).
+    // Without it, the tool is Active but listens to nothing.
+    //
     // v4 name: StackScrollTool (NOT StackScrollMouseWheelTool)
-    const StackScrollTool = cornerstoneTools.StackScrollTool;
-    if (StackScrollTool) {
-      try { toolGroup.setToolActive(StackScrollTool.toolName); } catch {}
+    if (StackScrollTool && toolGroup.hasTool(StackScrollTool.toolName)) {
+      try {
+        toolGroup.setToolActive(StackScrollTool.toolName, {
+          bindings: [{ mouseButton: Enums.MouseBindings.Wheel }],
+        });
+        console.log(
+          `[CornerstoneViewport] StackScrollTool re-activated after tool switch to ${activeTool}`
+        );
+      } catch (err) {
+        console.error(
+          "[CornerstoneViewport] FAILED to re-activate StackScrollTool:", err
+        );
+      }
+    } else {
+      console.warn(
+        "[CornerstoneViewport] StackScrollTool not available in tool group.",
+        "StackScrollTool:", !!StackScrollTool,
+        "hasTool:", StackScrollTool ? toolGroup.hasTool(StackScrollTool.toolName) : "N/A"
+      );
+    }
+
+    // ── PanTool: middle-click ────────────────────────────────
+    //
+    // If Pan is the selected PRIMARY tool (left-click), don't
+    // also bind it to middle-click — that would create a
+    // duplicate binding. Only re-activate on Auxiliary (middle)
+    // when Pan is NOT the primary selection.
+    if (
+      PanTool &&
+      activeTool !== "Pan" &&
+      toolGroup.hasTool(PanTool.toolName)
+    ) {
+      try {
+        toolGroup.setToolActive(PanTool.toolName, {
+          bindings: [
+            { mouseButton: Enums.MouseBindings.Auxiliary },
+          ],
+        });
+      } catch (err) {
+        console.error("[CornerstoneViewport] FAILED to re-activate PanTool:", err);
+      }
+    }
+
+    // ── ZoomTool: right-click ────────────────────────────────
+    //
+    // Same logic as Pan — only bind to Secondary (right-click)
+    // when Zoom is NOT the primary tool.
+    if (
+      ZoomTool &&
+      activeTool !== "Zoom" &&
+      toolGroup.hasTool(ZoomTool.toolName)
+    ) {
+      try {
+        toolGroup.setToolActive(ZoomTool.toolName, {
+          bindings: [
+            { mouseButton: Enums.MouseBindings.Secondary },
+          ],
+        });
+      } catch (err) {
+        console.error("[CornerstoneViewport] FAILED to re-activate ZoomTool:", err);
+      }
     }
   }, [activeTool, ready]);
 
@@ -342,6 +460,7 @@ export default function CornerstoneViewport({
   //  RENDER
   // ═══════════════════════════════════════════════════════════════════
 
+  // Error state
   if (error) {
     return (
       <div className={styles.wrapper}>
@@ -352,6 +471,7 @@ export default function CornerstoneViewport({
     );
   }
 
+  // Loading state
   if (!ready) {
     return (
       <div className={styles.wrapper}>
@@ -374,10 +494,9 @@ export default function CornerstoneViewport({
       {/* Cornerstone viewport canvas container.
        *
        *  CSS: position:absolute fills the wrapper even before
-       *  Cornerstone injects the <canvas>. This is what fixes
-       *  the "tiny canvas" bug — without absolute positioning,
-       *  this div has zero intrinsic height (no content yet)
-       *  and Cornerstone creates a 0×0 canvas. */}
+       *  Cornerstone injects its <canvas> element. Without this,
+       *  the div has zero intrinsic height and Cornerstone creates
+       *  a tiny 0×0 canvas — the "tiny rendering" bug. */}
       <div ref={containerRef} className={styles.canvas} />
     </div>
   );
