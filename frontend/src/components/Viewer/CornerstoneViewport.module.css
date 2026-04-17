@@ -1,14 +1,29 @@
+/* CornerstoneViewport.module.css
+ *
+ * Layout for the Cornerstone viewport container.
+ *
+ * KEY FIX: .canvas must be position:absolute so it fills
+ * the wrapper BEFORE Cornerstone injects its <canvas> element.
+ * Without this, the div has zero intrinsic height (it has no
+ * content initially), and Cornerstone creates a tiny canvas
+ * because it reads clientWidth/clientHeight as 0.
+ */
+
 .wrapper {
   position: relative;
   width: 100%;
   height: 100%;
+  min-height: 0;          /* crucial for flex/grid children */
   background: #000;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.06));
   border-radius: 4px;
   overflow: hidden;
 }
 
 .canvas {
+  position: absolute;     /* fills wrapper regardless of content */
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
 }
@@ -19,7 +34,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-muted);
+  color: var(--text-muted, rgba(255, 255, 255, 0.4));
   font-size: 13px;
   letter-spacing: 0.05em;
   z-index: 1;
