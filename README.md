@@ -11,7 +11,7 @@ A personal self-hosted DICOM medical imaging viewer. Built for radiologists and 
 <!-- Add your screenshots here -->
 | Study List | Viewer |
 |------------|--------|
-| ![Study List](screenshots/study-list.png) | ![Viewer](screenshots/viewer.png) |
+| <img width="1568" height="744" alt="image" src="https://github.com/user-attachments/assets/c4cde557-20d1-4f0d-b96c-51b6570fa09f" /> | <img width="1919" height="917" alt="image" src="https://github.com/user-attachments/assets/9312fcb5-94a6-40ff-9eba-b662f8fc048f" /> |
 
 ---
 
