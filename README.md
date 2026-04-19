@@ -27,6 +27,7 @@ A personal self-hosted DICOM medical imaging viewer. Built for radiologists and 
 - JWT-based authentication with user accounts
 - Sync studies from Orthanc into a local PostgreSQL database
 - Async background tasks via Celery and Redis
+- **Auto-upload DICOM files on startup** — drop files in `dicom_files/` and they are pushed to Orthanc automatically when the stack starts
 - Everything runs locally via Docker Compose
 
 ---
@@ -57,12 +58,18 @@ ohif-project/
 │   ├── package.json
 │   └── Dockerfile
 │
+├── dicom_files/               # DICOM files auto-uploaded on startup
+│   ├── series-00001/
+│   ├── series-00002/
+│   └── *.dcm / *.DCM
+│
 ├── orthanc/
 │   └── orthanc.json           # Orthanc config + DICOMweb plugin
 │
 ├── nginx/
 │   └── nginx.conf             # Reverse proxy routing
 │
+├── upload_dicom_files.sh      # Startup uploader script (runs in dicom-uploader container)
 ├── docker-compose.yml
 ├── .env.example
 └── README.md
@@ -83,6 +90,9 @@ Backend
 
 Celery Worker
   └── Connects to Redis + PostgreSQL for background jobs
+
+dicom-uploader (one-shot)
+  └── Waits for Orthanc → uploads all files from dicom_files/ → exits
 ```
 
 ---
@@ -103,20 +113,35 @@ cp .env.example .env
 
 Open `.env` and fill in your secrets (see [Environment Variables](#environment-variables) below).
 
-### 2. Start everything
+### 2. (Optional) Add DICOM files to auto-upload
+
+Drop any `.dcm` files or folders into `dicom_files/` before starting. They will be automatically uploaded to Orthanc when the stack starts:
+
+```
+dicom_files/
+├── series-00001/
+│   ├── image-00000.dcm
+│   └── image-00001.dcm
+├── scan.dcm
+└── ...
+```
+
+> Files are deduplicated by Orthanc — re-running `docker compose up` will not create duplicates.
+
+### 3. Start everything
 
 ```bash
 docker compose up --build
 ```
 
-### 3. Run database setup
+### 4. Run database setup
 
 ```bash
 docker compose exec backend python manage.py migrate
 docker compose exec backend python manage.py createsuperuser
 ```
 
-### 4. Open in browser
+### 5. Open in browser
 
 | Service | URL |
 |---------|-----|
@@ -129,15 +154,36 @@ docker compose exec backend python manage.py createsuperuser
 
 ## Uploading DICOM Files
 
+### Automatic (recommended)
+
+Place `.dcm` files (or subdirectories containing them) inside `dicom_files/` before running `docker compose up`. The `dicom-uploader` service will wait for Orthanc to be ready, upload everything, then exit. Progress is logged:
+
+```
+dicom-uploader-1  | Orthanc ready. Scanning for DICOM files...
+dicom-uploader-1  | OK (200): /dicom_files/series-00001/image-00000.dcm
+dicom-uploader-1  | OK (200): /dicom_files/scan.dcm
+dicom-uploader-1  | Done. Uploaded: 42, Failed: 0
+```
+
+After the uploader finishes, hit the **Sync** button in the viewer (top right) to pull the new studies into the local database.
+
+### Manual — REST API
+
 ```bash
-# Upload a DICOM file via Orthanc REST API
 curl -u admin:orthanc -X POST http://localhost/orthanc/instances \
   --data-binary @/path/to/your.dcm
 ```
 
-Or use the Orthanc web UI at http://localhost/orthanc, then click "Upload" and drag your `.dcm` files in.
+### Manual — Orthanc UI
 
-After uploading, hit the **Sync** button in the viewer (top right) to pull the new studies into the local database.
+Open http://localhost/orthanc, click **Upload**, and drag your `.dcm` files in.
+
+### Reset and re-upload from scratch
+
+```bash
+docker compose down -v          # deletes all volumes including orthanc storage
+docker compose up --build       # uploader runs fresh and re-uploads everything
+```
 
 ---
 
@@ -218,6 +264,9 @@ docker compose logs -f backend
 
 # Watch Orthanc logs
 docker compose logs -f orthanc
+
+# Watch DICOM uploader logs
+docker compose logs dicom-uploader
 
 # Open Django shell
 docker compose exec backend python manage.py shell
