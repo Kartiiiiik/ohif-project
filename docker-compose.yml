@@ -32,6 +32,16 @@ services:
     depends_on:
       - db
 
+  dicom-uploader:
+    image: curlimages/curl:latest
+    volumes:
+      - ./dicom_files:/dicom_files:ro
+      - ./upload_dicom_files.sh:/upload_dicom_files.sh:ro
+    depends_on:
+      - orthanc
+    restart: "no"
+    entrypoint: ["/bin/sh", "/upload_dicom_files.sh"]
+
   backend:
     build:
       context: ./backend
@@ -55,6 +65,7 @@ services:
     depends_on:
       - db
       - redis
+
   frontend:
     build:
       context: ./frontend
